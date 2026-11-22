@@ -106,10 +106,12 @@ async function prepareImage(file: File): Promise<SuggestionImage> {
     const ratio = Math.min(1, 1_500 / Math.max(bitmap.width, bitmap.height));
     let scale = ratio;
     let quality = 0.82;
+    const baseWidth = bitmap.width;
+    const baseHeight = bitmap.height;
     bitmap.close();
 
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      const preview = await makeJpeg(file, Math.max(1, Math.round(file.width * scale)), Math.max(1, Math.round(file.height * scale)), quality);
+      const preview = await makeJpeg(file, Math.max(1, Math.round(baseWidth * scale)), Math.max(1, Math.round(baseHeight * scale)), quality);
       uploadBlob = preview;
       mimeType = "image/jpeg";
       if (preview.size <= IMAGE_LIMIT_BYTES) break;

@@ -143,7 +143,7 @@ async function callGroq(apiKey: string, prompt: string): Promise<string> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       temperature: 0.3,
       max_tokens: 6_500,
       response_format: { type: "json_object" },

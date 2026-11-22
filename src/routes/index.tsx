@@ -1,23 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// The home route ships no og:image, so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
-export const Route = createFileRoute("/")({
-  component: Index,
-});
+import { StudyApp } from "@/components/study/StudyApp";
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "পরীক্ষা সহায়ক — সাজেশন থেকে প্রশ্ন-উত্তর" },
+      { name: "description", content: "সাজেশনের ছবি দিন, গুরুত্ব অনুযায়ী প্রশ্ন-উত্তর পান এবং এআই ভয়েসে শুনুন।" },
+      { property: "og:title", content: "পরীক্ষা সহায়ক — সাজেশন থেকে প্রশ্ন-উত্তর" },
+      { property: "og:description", content: "সাজেশনের ছবি থেকে সংক্ষিপ্ত, মাঝারি ও বর্ণনামূলক প্রশ্ন-উত্তর ও ভয়েস।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: StudyApp,
+});
