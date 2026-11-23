@@ -9,6 +9,8 @@ import {
   FileText,
   ImagePlus,
   Lightbulb,
+  Share2,
+  X,
   LoaderCircle,
   NotebookPen,
   Sparkles,
@@ -21,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AboutMenu } from "@/components/study/AboutMenu";
-import { buildStudyPdf, deliverFile } from "@/lib/study.pdf";
+import { buildStudyPdf, deliverFile, shareApp } from "@/lib/study.pdf";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { generateStudyPack, speakStudyText } from "@/lib/study.functions";
@@ -56,7 +58,8 @@ const timingOptions: Array<{ value: StudyRequest["examTiming"]; label: string }>
 const questionKinds: Array<{ value: QuestionKind; label: string; detail: string }> = [
   { value: "short", label: "সংক্ষিপ্ত", detail: "ছোট প্রশ্ন" },
   { value: "medium", label: "মাঝারি", detail: "বর্ণনামূলক" },
-  { value: "long", label: "বড়", detail: "রচনামূলক" },
+  { value: "long", label: "বর্ণনামূলক", detail: "বড় প্রশ্ন" },
+  { value: "writing", label: "দরখাস্ত/রচনা", detail: "দরখাস্ত, পত্র, রচনা" },
 ];
 
 function readAsDataUrl(blob: Blob): Promise<string> {
@@ -197,7 +200,7 @@ function QuestionRow({
           {isSpeaking ? "অডিও তৈরি হচ্ছে" : audioUrl ? "আবার শুনুন" : "শুনুন"}
         </Button>
         {audioUrl ? (
-          <audio ref={audioRef} controls src={audioUrl} className="h-9 w-full max-w-sm" aria-label="উত্তরের অডিও" />
+          <audio ref={audioRef} controls autoPlay src={audioUrl} className="h-9 w-full max-w-sm" aria-label="উত্তরের অডিও" />
         ) : null}
       </div>
     </article>
@@ -232,6 +235,8 @@ export function StudyApp() {
   const [resultTab, setResultTab] = useState<ResultTab>("topics");
   const [questionKind, setQuestionKind] = useState<QuestionKind>("short");
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [topicFilter, setTopicFilter] = useState<string | null>(null);
+  const [shareNote, setShareNote] = useState("");
   const [audioState, setAudioState] = useState<{ id: string; url: string } | null>(null);
 
   useEffect(
@@ -311,7 +316,8 @@ export function StudyApp() {
       setPack(result.pack);
       setRecognizedText(result.recognizedText);
       setResultTab("topics");
-      setQuestionKind("short");
+      setQuestionKind((["short", "medium", "long", "writing"] as QuestionKind[]).find((k) => result.pack.questions[k].length > 0) ?? "short");
+      setTopicFilter(null);
       setAudioState(null);
     } catch (error) {
       setErrorMessage(friendlyError(error));
@@ -582,7 +588,7 @@ export function StudyApp() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                   {pdfBlob ? (
-                    <Button type="button" className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => void deliverFile(pdfBlob, `${pack.title || "uttor"}.pdf`)}>
+                    <Button type="button" className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => deliverFile(pdfBlob, `${pack.title || "uttor"}.pdf`)}>
                       <FileText aria-hidden="true" /> PDF সেভ করুন
                     </Button>
                   ) : (
@@ -590,6 +596,10 @@ export function StudyApp() {
                       <FileText aria-hidden="true" /> {pdfBusy ? "PDF তৈরি হচ্ছে..." : "সব উত্তর PDF"}
                     </Button>
                   )}
+                  <Button type="button" variant="outline" onClick={() => void shareApp().then((r) => setShareNote(r === "copied" ? "লিংক কপি হয়েছে — মেসেঞ্জারে পেস্ট করুন" : ""))}>
+                    <Share2 aria-hidden="true" /> বন্ধুদের শেয়ার
+                  </Button>
+                  {shareNote ? <span className="w-full text-xs text-primary">{shareNote}</span> : null}
                   <Button type="button" variant="outline" onClick={() => setPack(null)}>
                     <NotebookPen aria-hidden="true" />
                     নতুন প্রস্তুতি
@@ -627,7 +637,15 @@ export function StudyApp() {
                     </div>
                     <ol className="divide-y divide-border border-y border-border">
                       {pack.topics.map((topic, index) => (
-                        <li key={`${topic.name}-${index}`} className="flex items-start gap-3 py-4">
+                        <li key={`${topic.name}-${index}`}>
+                         <button type="button" className="flex w-full items-start gap-3 py-4 text-start hover:bg-muted/40" onClick={() => {
+                           const all = (Object.keys(pack.questions) as QuestionKind[]);
+                           const match = (q: StudyQuestion) => q.topic.includes(topic.name) || topic.name.includes(q.topic) || q.question.includes(topic.name);
+                           const first = all.find((k) => pack.questions[k].some(match));
+                           setTopicFilter(first ? topic.name : null);
+                           if (first) setQuestionKind(first);
+                           setResultTab("questions");
+                         }}>
                           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
                             {(index + 1).toLocaleString("bn-BD")}
                           </span>
@@ -641,6 +659,7 @@ export function StudyApp() {
                             <p className="mt-1 text-sm leading-6 text-muted-foreground">{topic.reason}</p>
                           </div>
                           <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                         </button>
                         </li>
                       ))}
                     </ol>
@@ -665,7 +684,7 @@ export function StudyApp() {
                             type="button"
                             size="sm"
                             variant={questionKind === kind.value ? "secondary" : "outline"}
-                            onClick={() => setQuestionKind(kind.value)}
+                            onClick={() => { setQuestionKind(kind.value); setTopicFilter(null); }}
                             aria-pressed={questionKind === kind.value}
                           >
                             {kind.label}
@@ -683,7 +702,14 @@ export function StudyApp() {
                     </div>
 
                     <div className="space-y-3">
+                      {topicFilter ? (
+                        <div className="flex items-center justify-between gap-2 rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground">
+                          <span>বিষয়: {topicFilter}</span>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setTopicFilter(null)}><X aria-hidden="true" /> সব দেখুন</Button>
+                        </div>
+                      ) : null}
                       {pack.questions[questionKind].map((question, index) => {
+                        if (topicFilter && !(question.topic.includes(topicFilter) || topicFilter.includes(question.topic) || question.question.includes(topicFilter))) return null;
                         const id = `${questionKind}-${index}`;
                         return (
                           <QuestionRow
@@ -693,7 +719,7 @@ export function StudyApp() {
                             audioUrl={audioState?.id === id ? audioState.url : null}
                             audioRef={audioRef}
                             isSpeaking={speakingId === id}
-                            onSpeak={() => void handleSpeak(id, question.answer)}
+                            onSpeak={() => void handleSpeak(id, `${question.question}। ${question.answer}`)}
                           />
                         );
                       })}

@@ -4,6 +4,7 @@ const kindTitle: Record<QuestionKind, string> = {
   short: "সংক্ষিপ্ত প্রশ্ন (২ নম্বর)",
   medium: "মাঝারি প্রশ্ন",
   long: "বর্ণনামূলক প্রশ্ন (৩ নম্বর)",
+  writing: "দরখাস্ত / পত্র / রচনা",
 };
 
 function esc(s: string) {
@@ -25,7 +26,7 @@ export async function buildStudyPdf(pack: StudyPack): Promise<Blob> {
 
   const blocks: HTMLElement[] = [];
   blocks.push(block(`<div style="background:#0f3b2e;color:#f5e6b8;border-radius:12px;padding:20px"><div style="font-size:13px;opacity:.8">পরীক্ষাসাথী</div><div style="font-size:24px;font-weight:700">${esc(pack.title)}</div><div style="color:#e8efe9;margin-top:6px">${esc(pack.summary)}</div></div>`));
-  (["short", "medium", "long"] as QuestionKind[]).forEach((k) => {
+  (["short", "medium", "long", "writing"] as QuestionKind[]).forEach((k) => {
     const qs = pack.questions[k] ?? [];
     if (!qs.length) return;
     blocks.push(block(`<div style="font-size:19px;font-weight:700;color:#0f3b2e;border-bottom:2px solid #c9a24a;padding-bottom:4px">${kindTitle[k]} — ${qs.length}টি</div>`));
@@ -76,16 +77,21 @@ export async function buildStudyPdf(pack: StudyPack): Promise<Blob> {
   return pdf.output("blob");
 }
 
-export async function deliverFile(blob: Blob, filename: string) {
-  const file = new File([blob], filename, { type: blob.type });
-  const touch = matchMedia("(pointer: coarse)").matches;
-  if (touch && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: filename }); return; }
-    catch (e) { if ((e as DOMException).name === "AbortError") return; }
-  }
+export function deliverFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+export async function shareApp() {
+  const url = "https://snap-to-study-companion.lovable.app";
+  const text = "পরীক্ষাসাথী — সাজেশনের ছবি দিলেই সব প্রশ্নের উত্তর, PDF আর বাংলা কণ্ঠে শোনা। এখান থেকে অ্যাপটি খুলুন/ইনস্টল করুন:";
+  if (navigator.share) {
+    try { await navigator.share({ title: "পরীক্ষাসাথী", text, url }); return "shared"; }
+    catch (e) { if ((e as DOMException).name === "AbortError") return "cancel"; }
+  }
+  await navigator.clipboard?.writeText(`${text} ${url}`);
+  return "copied";
 }

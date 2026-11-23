@@ -1,5 +1,5 @@
 export type StudyPriority = "high" | "medium" | "low";
-export type QuestionKind = "short" | "medium" | "long";
+export type QuestionKind = "short" | "medium" | "long" | "writing";
 
 export type SuggestionImage = {
   mimeType: "image/jpeg" | "image/png" | "image/webp";
