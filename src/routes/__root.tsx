@@ -11,6 +11,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import { InstallAppButton } from "@/components/InstallAppButton";
+import { SplashScreen } from "@/components/SplashScreen";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -138,6 +139,7 @@ function RootComponent() {
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <InstallAppButton />
+      <SplashScreen />
     </QueryClientProvider>
   );
 }
