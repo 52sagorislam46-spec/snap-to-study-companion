@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Info, Smartphone, UserRound, ArrowLeft } from "lucide-react";
+import sagorPhoto from "@/assets/sagor_profile.jpg.asset.json";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
@@ -50,7 +51,7 @@ export function AboutMenu() {
 
         {view === "creator" && (
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="flex size-16 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">স</span>
+            <img src={sagorPhoto.url} alt="সাগর (Sagor)" className="size-28 rounded-full object-cover ring-4 ring-accent shadow-[var(--shadow-elegant)]" />
             <p className="text-lg font-bold">সাগর (Sagor)</p>
             <p className="text-sm text-muted-foreground">শিক্ষার্থীরা যেন পরীক্ষার শেষ মুহূর্তে সহজে ও দ্রুত প্রস্তুতি নিতে পারে, সেজন্য এই অ্যাপটি তৈরি করেছেন।</p>
           </div>

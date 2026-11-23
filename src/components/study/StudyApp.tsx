@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AboutMenu } from "@/components/study/AboutMenu";
+import { buildStudyPdf, deliverFile } from "@/lib/study.pdf";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { generateStudyPack, speakStudyText } from "@/lib/study.functions";
@@ -219,6 +220,14 @@ export function StudyApp() {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [pack, setPack] = useState<StudyPack | null>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  useEffect(() => { setPdfBlob(null); }, [pack]);
+  async function makePdf() {
+    if (!pack) return;
+    setPdfBusy(true);
+    try { setPdfBlob(await buildStudyPdf(pack)); } catch { setErrorMessage("PDF তৈরি করা যায়নি, আবার চেষ্টা করুন।"); } finally { setPdfBusy(false); }
+  }
   const [recognizedText, setRecognizedText] = useState("");
   const [resultTab, setResultTab] = useState<ResultTab>("topics");
   const [questionKind, setQuestionKind] = useState<QuestionKind>("short");
@@ -339,15 +348,15 @@ export function StudyApp() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/80 bg-card">
+      <header className="sticky top-0 z-30 border-b border-accent/30 bg-[image:var(--gradient-hero)] text-primary-foreground shadow-[var(--shadow-elegant)]">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[image:var(--gradient-gold)] text-accent-foreground shadow-md">
               <BookOpenCheck aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-lg font-bold leading-tight">পরীক্ষাসাথী</p>
-              <p className="mt-1 text-xs text-muted-foreground">শেষ মুহূর্তের পড়া, গুছিয়ে</p>
+              <p className="mt-1 text-xs text-primary-foreground/75">শেষ মুহূর্তের পড়া, গুছিয়ে</p>
             </div>
           </div>
           <div className="ml-auto hidden items-center gap-2 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground sm:flex">
@@ -571,10 +580,21 @@ export function StudyApp() {
                     <h2 className="text-xl font-bold leading-snug sm:text-2xl">{pack.title}</h2>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{pack.summary}</p>
                   </div>
+                  <div className="flex flex-wrap gap-2">
+                  {pdfBlob ? (
+                    <Button type="button" className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => void deliverFile(pdfBlob, `${pack.title || "uttor"}.pdf`)}>
+                      <FileText aria-hidden="true" /> PDF সেভ করুন
+                    </Button>
+                  ) : (
+                    <Button type="button" disabled={pdfBusy} className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => void makePdf()}>
+                      <FileText aria-hidden="true" /> {pdfBusy ? "PDF তৈরি হচ্ছে..." : "সব উত্তর PDF"}
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" onClick={() => setPack(null)}>
                     <NotebookPen aria-hidden="true" />
                     নতুন প্রস্তুতি
                   </Button>
+                  </div>
                 </div>
 
                 <Tabs
