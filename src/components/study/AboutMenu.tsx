@@ -11,7 +11,7 @@ export function AboutMenu() {
   return (
     <Dialog onOpenChange={(open) => !open && setView("menu")}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" aria-label="পরিচিতি" className="shrink-0 rounded-full">
+        <Button size="icon" aria-label="পরিচিতি" className="shrink-0 rounded-full bg-accent text-accent-foreground shadow-md hover:bg-accent/90">
           <Info className="size-5" />
         </Button>
       </DialogTrigger>

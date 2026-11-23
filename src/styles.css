@@ -152,6 +152,16 @@
     border-color: var(--color-border);
   }
 
+  html, body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
