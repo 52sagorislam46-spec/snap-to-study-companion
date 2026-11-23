@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AboutMenu } from "@/components/study/AboutMenu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { generateStudyPack, speakStudyText } from "@/lib/study.functions";
@@ -349,10 +350,11 @@ export function StudyApp() {
               <p className="mt-1 text-xs text-muted-foreground">শেষ মুহূর্তের পড়া, গুছিয়ে</p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground sm:flex">
+          <div className="ml-auto hidden items-center gap-2 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground sm:flex">
             <Clock3 className="size-4" aria-hidden="true" />
             <span>{timingOptions.find((item) => item.value === examTiming)?.label ?? "আগামীকাল"}র প্রস্তুতি</span>
           </div>
+          <AboutMenu />
         </div>
       </header>
 
