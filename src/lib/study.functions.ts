@@ -20,7 +20,7 @@ const studyRequestSchema = z.object({
 const questionSchema = z.object({
   topic: z.string().min(1).max(120),
   question: z.string().min(1).max(500),
-  answer: z.string().min(1).max(3_500),
+  answer: z.string().min(1).max(6_000),
   priority: z.enum(["high", "medium", "low"]),
 });
 
@@ -36,11 +36,11 @@ const studyPackSchema = z.object({
       }),
     )
     .min(1)
-    .max(12),
+    .max(40),
   questions: z.object({
-    short: z.array(questionSchema).min(1).max(8),
-    medium: z.array(questionSchema).min(1).max(7),
-    long: z.array(questionSchema).min(1).max(5),
+    short: z.array(questionSchema).min(1).max(60),
+    medium: z.array(questionSchema).min(1).max(40),
+    long: z.array(questionSchema).min(1).max(30),
   }),
   studyPlan: z
     .array(
@@ -116,7 +116,7 @@ async function callGemini(
         contents: [{ role: "user", parts }],
         generationConfig: {
           temperature: jsonOutput ? 0.35 : 0.1,
-          maxOutputTokens: jsonOutput ? 6_500 : 5_000,
+          maxOutputTokens: jsonOutput ? 30_000 : 8_000,
           ...(jsonOutput ? { responseMimeType: "application/json" } : {}),
         },
       }),
@@ -145,7 +145,7 @@ async function callGroq(apiKey: string, prompt: string): Promise<string> {
     body: JSON.stringify({
       model: "openai/gpt-oss-120b",
       temperature: 0.3,
-      max_tokens: 6_500,
+      max_tokens: 30_000,
       response_format: { type: "json_object" },
       messages: [
         {
@@ -194,7 +194,12 @@ ${studyMaterial.slice(0, 18_000)}
 
 কাজ:
 ১) দেওয়া সাজেশনকে গুরুত্ব দিয়ে বিষয়গুলো বেশি পরীক্ষোপযোগী থেকে কম পরীক্ষোপযোগী ক্রমে সাজাও। একাধিক ছবিতে একই বিষয় বারবার এলে গুরুত্ব বাড়াও, কিন্তু নিশ্চিত প্রশ্ন বা পাসের নিশ্চয়তা বলো না। কোনো ছবি অস্পষ্ট হলে সেটি বানিয়ে না লিখে সারাংশে সতর্ক করো। সাজেশন না থাকলে বিষয় ও শ্রেণির ভিত্তিতে সাধারণ পাঠ্যসূচির সম্ভাব্য মূল ধারণা বেছে নাও; নির্দিষ্ট বোর্ডের অজানা তথ্য বানিও না।
-২) বাংলায় সহজে মনে রাখার মতো উত্তরসহ প্রশ্ন তৈরি করো: short-এ ৬টি (প্রতিটি উত্তর সংক্ষিপ্ত), medium-এ ৫টি (প্রতিটি উত্তর আনুমানিক ৮০–১২০ বাংলা শব্দ), long-এ ৩টি (প্রতিটি উত্তর আনুমানিক ১৫০–২০০ বাংলা শব্দ)। সব উত্তর বিষয়ভিত্তিক, সঠিক ও প্রয়োজনমতো শিরোনাম/বুলেটসহ হবে।
+২) সাজেশনের ছবিতে যতগুলো প্রশ্ন বা টপিক আছে, একটিও বাদ দেবে না — প্রতিটির উত্তর অবশ্যই দেবে, বেছে বেছে নয়। ছবির ২ নম্বরের/ছোট প্রশ্নগুলো short-এ, মাঝারি প্রশ্ন medium-এ, ৩ নম্বরের/বড় রচনামূলক প্রশ্ন long-এ রাখবে। সাজেশন না থাকলে short-এ ৬টি, medium-এ ৫টি, long-এ ৩টি প্রশ্ন বানাবে।
+উত্তরের নিয়ম:
+- short (২ নম্বর): একেবারে ছোট — সরাসরি সংজ্ঞা/মূল কথা ১–২ বাক্যে বা ২টি পয়েন্টে, বাড়তি কথা নয়।
+- medium: ৬০–১০০ শব্দে মূল পয়েন্টসহ।
+- long (৩ নম্বর/বড়): অবশ্যই এই কাঠামোয় লিখবে — "ভূমিকা:" (২–৩ বাক্য), তারপর "মূল আলোচনা / শর্তাবলি:" শিরোনামে সব প্রয়োজনীয় শর্ত, কারণ, বৈশিষ্ট্য বা ধাপ ক্রমিক পয়েন্টে, তারপর "উপসংহার:" (২–৩ বাক্য)। প্রতিটি অংশ আলাদা লাইনে।
+সব উত্তর বাংলায়, সঠিক ও মুখস্থ রাখার মতো সহজ হবে।
 ৩) পরীক্ষার সময় অনুযায়ী অগ্রাধিকারভিত্তিক ৩–৫ ধাপের পড়ার পরিকল্পনা এবং ৩–৫টি শেষ মুহূর্তের টিপস দাও।
 ৪) শুধু নিচের কাঠামোর JSON দাও, markdown fence বা অতিরিক্ত লেখা নয়:
 {
