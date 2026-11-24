@@ -31,4 +31,4 @@ use the editor.
 
 ## Application architecture
 
-- Keep Gemini, Groq, and Cartesia calls in server functions and keep study sessions in browser memory, so provider keys stay private and exam uploads are not retained by default.
+- Keep Gemini, Groq, and Cartesia calls in server functions, scan suggestion images individually, and orchestrate bounded answer batches in browser memory; this avoids single-response truncation and keeps provider keys and exam uploads private by default.

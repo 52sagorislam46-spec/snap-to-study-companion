@@ -6,6 +6,16 @@ export type SuggestionImage = {
   data: string;
 };
 
+export type SuggestionQuestionDraft = {
+  id: string;
+  imageId: string;
+  sourcePage: number;
+  kind: QuestionKind;
+  topic: string;
+  question: string;
+  marks: number | null;
+};
+
 export type StudyQuestion = {
   topic: string;
   question: string;

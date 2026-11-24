@@ -1,0 +1,3 @@
+- [ ] Scan each uploaded suggestion image separately and retain every recognized item without silent truncation.
+- [ ] Generate answers in small, validated batches with visible progress and retryable remaining items.
+- [ ] Run the focused coverage tests and verify the preview build has no errors.
