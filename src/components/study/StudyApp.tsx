@@ -26,16 +26,27 @@ import { AboutMenu } from "@/components/study/AboutMenu";
 import { buildStudyPdf, deliverFile, shareApp } from "@/lib/study.pdf";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { generateStudyPack, speakStudyText } from "@/lib/study.functions";
+import {
+  answerSuggestionBatch,
+  generateStudyPack,
+  scanSuggestionImage,
+  speakStudyText,
+} from "@/lib/study.functions";
 import type {
   QuestionKind,
   StudyPack,
   StudyPriority,
   StudyQuestion,
   StudyRequest,
+  SuggestionQuestionDraft,
   SuggestionImage,
 } from "@/lib/study.types";
-import { isWithinSuggestionImageLimit, MAX_SUGGESTION_IMAGES } from "@/lib/study.validation";
+import {
+  ANSWER_BATCH_SIZE,
+  createQuestionBatches,
+  isWithinSuggestionImageLimit,
+  MAX_SUGGESTION_IMAGES,
+} from "@/lib/study.validation";
 
 const IMAGE_LIMIT_BYTES = 360_000;
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -209,6 +220,8 @@ function QuestionRow({
 
 export function StudyApp() {
   const generate = useServerFn(generateStudyPack);
+  const scanImage = useServerFn(scanSuggestionImage);
+  const answerBatch = useServerFn(answerSuggestionBatch);
   const speak = useServerFn(speakStudyText);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -238,6 +251,12 @@ export function StudyApp() {
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState("");
   const [audioState, setAudioState] = useState<{ id: string; url: string } | null>(null);
+  const [scannedQuestions, setScannedQuestions] = useState<SuggestionQuestionDraft[]>([]);
+  const [scannedPageIds, setScannedPageIds] = useState<string[]>([]);
+  const [scanRequestKey, setScanRequestKey] = useState("");
+  const [answeredQuestionIds, setAnsweredQuestionIds] = useState<string[]>([]);
+  const [progress, setProgress] = useState({ label: "", completed: 0, total: 0 });
+  const pendingQuestionCount = Math.max(0, scannedQuestions.length - answeredQuestionIds.length);
 
   useEffect(
     () => () => {
@@ -273,17 +292,27 @@ export function StudyApp() {
       return { id: crypto.randomUUID(), file, previewUrl };
     });
     setSelectedImages((current) => [...current, ...newImages]);
+    setScannedQuestions([]);
+    setScannedPageIds([]);
+    setScanRequestKey("");
+    setAnsweredQuestionIds([]);
+    setPack(null);
+    setRecognizedText("");
   }
 
   function removeImage(id: string) {
-    setSelectedImages((current) => {
-      const removed = current.find((image) => image.id === id);
-      if (removed) {
-        URL.revokeObjectURL(removed.previewUrl);
-        previewUrlsRef.current.delete(removed.previewUrl);
-      }
-      return current.filter((image) => image.id !== id);
-    });
+    const removed = selectedImages.find((image) => image.id === id);
+    if (removed) {
+      URL.revokeObjectURL(removed.previewUrl);
+      previewUrlsRef.current.delete(removed.previewUrl);
+    }
+    setSelectedImages((current) => current.filter((image) => image.id !== id));
+    setScannedQuestions([]);
+    setScannedPageIds([]);
+    setScanRequestKey("");
+    setAnsweredQuestionIds([]);
+    setPack(null);
+    setRecognizedText("");
   }
 
   async function handleGenerate(event: FormEvent<HTMLFormElement>) {
@@ -300,25 +329,158 @@ export function StudyApp() {
 
     setBusy(true);
     try {
-      const images =
-        mode === "images"
-          ? await Promise.all(selectedImages.map((image) => prepareImage(image.file)))
-          : [];
-      const result = await generate({
-        data: {
+      if (mode === "no-images") {
+        setProgress({ label: "প্রশ্নপত্র তৈরি হচ্ছে…", completed: 0, total: 0 });
+        setPack(null);
+        setScannedQuestions([]);
+        setScannedPageIds([]);
+        setScanRequestKey("");
+        setAnsweredQuestionIds([]);
+        setRecognizedText("");
+        const result = await generate({
+          data: {
+            subject: subject.trim(),
+            examLevel: examLevel.trim(),
+            examTiming,
+            focusNotes: focusNotes.trim(),
+            images: [],
+          },
+        });
+        setPack(result.pack);
+        setResultTab("topics");
+        setQuestionKind((["short", "medium", "long", "writing"] as QuestionKind[]).find((kind) => result.pack.questions[kind].length > 0) ?? "short");
+        setTopicFilter(null);
+        setAudioState(null);
+        setProgress({ label: "", completed: 0, total: 0 });
+      } else {
+        const requestKey = JSON.stringify({
           subject: subject.trim(),
           examLevel: examLevel.trim(),
-          examTiming,
           focusNotes: focusNotes.trim(),
-          images,
-        },
-      });
-      setPack(result.pack);
-      setRecognizedText(result.recognizedText);
-      setResultTab("topics");
-      setQuestionKind((["short", "medium", "long", "writing"] as QuestionKind[]).find((k) => result.pack.questions[k].length > 0) ?? "short");
-      setTopicFilter(null);
-      setAudioState(null);
+          images: selectedImages.map((image) => image.id),
+        });
+        const canContinue = scanRequestKey === requestKey && (
+          scannedPageIds.length < selectedImages.length || scannedQuestions.length > answeredQuestionIds.length
+        );
+        let localQuestions = canContinue ? [...scannedQuestions] : [];
+        const completedPageIds = new Set(canContinue ? scannedPageIds : []);
+        const completedIds = new Set(canContinue ? answeredQuestionIds : []);
+        let workingPack: StudyPack | null = canContinue ? pack : null;
+
+        if (!canContinue) {
+          setPack(null);
+          setScannedQuestions([]);
+          setScannedPageIds([]);
+          setAnsweredQuestionIds([]);
+          setRecognizedText("");
+        }
+        setScanRequestKey(requestKey);
+        setTopicFilter(null);
+        setAudioState(null);
+
+        setProgress({ label: "ছবিগুলো প্রস্তুত হচ্ছে…", completed: completedPageIds.size, total: selectedImages.length });
+        const images = await Promise.all(selectedImages.map((image) => prepareImage(image.file)));
+        for (let index = 0; index < selectedImages.length; index += 1) {
+          const selected = selectedImages[index];
+          const image = images[index];
+          if (!selected || !image || completedPageIds.has(selected.id)) continue;
+          setProgress({
+            label: `ছবি ${ (index + 1).toLocaleString("bn-BD")} / ${selectedImages.length.toLocaleString("bn-BD")} পড়া হচ্ছে`,
+            completed: completedPageIds.size,
+            total: selectedImages.length,
+          });
+          const scanned = await scanImage({
+            data: { subject: subject.trim(), pageNumber: index + 1, image },
+          });
+          const pageQuestions = scanned.questions.map((question, questionIndex) => ({
+            ...question,
+            id: `${selected.id}-q${questionIndex + 1}`,
+            imageId: selected.id,
+            sourcePage: index + 1,
+          }));
+          localQuestions = [...localQuestions, ...pageQuestions];
+          completedPageIds.add(selected.id);
+          setScannedQuestions(localQuestions);
+          setScannedPageIds([...completedPageIds]);
+          setProgress({
+            label: `ছবি ${completedPageIds.size.toLocaleString("bn-BD")} / ${selectedImages.length.toLocaleString("bn-BD")} পড়া হয়েছে`,
+            completed: completedPageIds.size,
+            total: selectedImages.length,
+          });
+        }
+
+        if (localQuestions.length === 0) {
+          throw new Error("ছবিগুলোতে পড়ার মতো প্রশ্ন পাওয়া যায়নি। পরিষ্কার ছবি দিয়ে আবার চেষ্টা করুন।");
+        }
+
+        setScannedQuestions(localQuestions);
+        setRecognizedText(`${localQuestions.length.toLocaleString("bn-BD")}টি সাজেশন প্রশ্ন`);
+        const topicNames = [...new Set(localQuestions.map((question) => question.topic))];
+        workingPack ??= {
+          title: `${subject.trim()} — সাজেশনের উত্তর`,
+          summary: "",
+          topics: topicNames.map((name) => ({ name, priority: "medium", reason: "আপনার সাজেশনে আছে" })),
+          questions: { short: [], medium: [], long: [], writing: [] },
+          studyPlan: [],
+          lastMinuteTips: [],
+        };
+        setPack(workingPack);
+        setResultTab("questions");
+        setQuestionKind(localQuestions.find((question) => !completedIds.has(question.id))?.kind ?? localQuestions[0]?.kind ?? "short");
+
+        const remainingQuestions = localQuestions.filter((question) => !completedIds.has(question.id));
+        const batches = createQuestionBatches(remainingQuestions, ANSWER_BATCH_SIZE);
+        setProgress({
+          label: "সব ছবি পড়া হয়েছে; উত্তর তৈরি হচ্ছে",
+          completed: completedIds.size,
+          total: localQuestions.length,
+        });
+
+        for (const batch of batches) {
+          const generated = await answerBatch({
+            data: {
+              subject: subject.trim(),
+              examLevel: examLevel.trim(),
+              focusNotes: focusNotes.trim(),
+              questions: batch,
+            },
+          });
+          const nextQuestions: StudyPack["questions"] = { ...workingPack.questions };
+          for (const item of generated.answers) {
+            nextQuestions[item.kind] = [
+              ...nextQuestions[item.kind],
+              { topic: item.topic, question: item.question, answer: item.answer, priority: item.priority },
+            ];
+            completedIds.add(item.id);
+          }
+          workingPack = {
+            ...workingPack,
+            questions: nextQuestions,
+            summary: `মোট ${localQuestions.length.toLocaleString("bn-BD")}টি প্রশ্ন পাওয়া গেছে; ${completedIds.size.toLocaleString("bn-BD")}টির উত্তর তৈরি হয়েছে।`,
+          };
+          setPack(workingPack);
+          setAnsweredQuestionIds([...completedIds]);
+          setProgress({
+            label: `উত্তর তৈরি হচ্ছে — ${completedIds.size.toLocaleString("bn-BD")} / ${localQuestions.length.toLocaleString("bn-BD")}`,
+            completed: completedIds.size,
+            total: localQuestions.length,
+          });
+        }
+
+        if (completedIds.size === localQuestions.length) {
+          workingPack = {
+            ...workingPack,
+            summary: `আপনার সাজেশনের ${localQuestions.length.toLocaleString("bn-BD")}টি প্রশ্ন শনাক্ত হয়েছে এবং সবগুলোর উত্তর তৈরি হয়েছে।`,
+          };
+          setPack(workingPack);
+          setProgress({
+            label: `সব ${localQuestions.length.toLocaleString("bn-BD")}টি প্রশ্নের উত্তর সম্পূর্ণ`,
+            completed: localQuestions.length,
+            total: localQuestions.length,
+          });
+        }
+        setResultTab("questions");
+      }
     } catch (error) {
       setErrorMessage(friendlyError(error));
     } finally {
@@ -556,9 +718,30 @@ export function StudyApp() {
 
                   <Button type="submit" className="h-11 w-full rounded-md" disabled={busy}>
                     {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-                    {busy ? "প্রশ্ন তৈরি হচ্ছে…" : "প্রস্তুতি তৈরি করুন"}
+                    {busy ? "প্রশ্ন তৈরি হচ্ছে…" : mode === "images" && pendingQuestionCount > 0 ? `বাকি ${pendingQuestionCount.toLocaleString("bn-BD")}টি উত্তর তৈরি করুন` : "প্রস্তুতি তৈরি করুন"}
                     {!busy ? <ChevronRight className="ms-auto" aria-hidden="true" /> : null}
                   </Button>
+                  {busy ? (
+                    <div role="status" aria-live="polite" className="space-y-2 rounded-md border border-border bg-muted/40 px-3 py-3 text-sm">
+                      <div className="flex items-center gap-2 font-medium text-foreground">
+                        <LoaderCircle className="size-4 animate-spin text-primary" aria-hidden="true" />
+                        <span>{progress.label || "প্রস্তুতি চলছে…"}</span>
+                      </div>
+                      {progress.total > 0 ? (
+                        <progress
+                          className="h-2 w-full accent-primary"
+                          max={progress.total}
+                          value={Math.min(progress.completed, progress.total)}
+                          aria-label="প্রস্তুতির অগ্রগতি"
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {!busy && recognizedText && pendingQuestionCount > 0 ? (
+                    <p role="status" className="rounded-md border border-accent/50 bg-accent/20 px-3 py-2 text-xs leading-5 text-foreground">
+                      {scannedQuestions.length.toLocaleString("bn-BD")}টি প্রশ্নের মধ্যে {answeredQuestionIds.length.toLocaleString("bn-BD")}টির উত্তর তৈরি হয়েছে। বাকি উত্তর তৈরি করতে উপরের বোতামে চাপ দিন।
+                    </p>
+                  ) : null}
                   <p className="text-center text-xs leading-5 text-muted-foreground">
                     প্রশ্নগুলো প্রস্তুতির সহায়তা—পরীক্ষার প্রশ্ন বা পাসের নিশ্চয়তা নয়।
                   </p>
@@ -575,7 +758,7 @@ export function StudyApp() {
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="rounded-sm border-primary/30 bg-primary/5 text-primary">
                         <Check className="me-1 size-3" aria-hidden="true" />
-                        প্রস্তুত
+                        {recognizedText && pendingQuestionCount > 0 ? "কিছু উত্তর বাকি" : "প্রস্তুত"}
                       </Badge>
                       {recognizedText ? (
                         <span className="text-xs text-muted-foreground">ছবির সাজেশন থেকে</span>
@@ -588,12 +771,12 @@ export function StudyApp() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                   {pdfBlob ? (
-                    <Button type="button" className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => deliverFile(pdfBlob, `${pack.title || "uttor"}.pdf`)}>
+                    <Button type="button" disabled={Boolean(recognizedText && pendingQuestionCount > 0)} className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => deliverFile(pdfBlob, `${pack.title || "uttor"}.pdf`)}>
                       <FileText aria-hidden="true" /> PDF সেভ করুন
                     </Button>
                   ) : (
-                    <Button type="button" disabled={pdfBusy} className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => void makePdf()}>
-                      <FileText aria-hidden="true" /> {pdfBusy ? "PDF তৈরি হচ্ছে..." : "সব উত্তর PDF"}
+                    <Button type="button" disabled={pdfBusy || Boolean(recognizedText && pendingQuestionCount > 0)} className="bg-[image:var(--gradient-gold)] text-accent-foreground shadow-[var(--shadow-elegant)]" onClick={() => void makePdf()}>
+                      <FileText aria-hidden="true" /> {pdfBusy ? "PDF তৈরি হচ্ছে..." : recognizedText && pendingQuestionCount > 0 ? "সব উত্তর হলে PDF" : "সব উত্তর PDF"}
                     </Button>
                   )}
                   <Button type="button" variant="outline" onClick={() => void shareApp().then((r) => setShareNote(r === "copied" ? "লিংক কপি হয়েছে — মেসেঞ্জারে পেস্ট করুন" : ""))}>
